@@ -12,9 +12,13 @@ app = FastAPI(title="Church Notification System")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # restrict to your frontend domain in production
+    allow_origins=[
+        "https://minderfrontend.netlify.app",
+        "http://localhost:3000",
+    ],
     allow_methods=["*"],
     allow_headers=["*"],
+    allow_credentials=True,
 )
 
 @app.on_event("startup")
