@@ -1,3 +1,10 @@
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+[build.environment]
+  VITE_API_URL = "https://minder-isyi.onrender.com"
+
 [[redirects]]
   from = "/*"
   to = "/index.html"
