@@ -1,7 +1,7 @@
 from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordRequestForm
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, field_validator
 from typing import Optional
 from config import get_db
 from auth import (hash_password, verify_password, create_token,
@@ -42,6 +42,11 @@ class WorkerIn(BaseModel):
     small_group:        bool = False
     active:             bool = True
 
+    @field_validator("department_id", "sub_department_id", "position", "email", "phone", mode="before")
+    @classmethod
+    def empty_str_to_none(cls, v):
+        return None if v == "" else v
+
 class EventIn(BaseModel):
     title:       str
     description: Optional[str] = None
@@ -53,6 +58,11 @@ class EventTargetIn(BaseModel):
     sub_department_id: Optional[str] = None
     position:          Optional[str] = None
     small_group_only:  bool = False
+
+    @field_validator("department_id", "sub_department_id", "position", mode="before")
+    @classmethod
+    def empty_str_to_none(cls, v):
+        return None if v == "" else v
 
 class DepartmentIn(BaseModel):
     name: str
