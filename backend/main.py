@@ -1,12 +1,14 @@
-from fastapi import FastAPI, Depends, HTTPException
+from fastapi import FastAPI, Depends, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordRequestForm
 from pydantic import BaseModel, EmailStr, field_validator
 from typing import Optional
+import io, openpyxl
 from config import get_db
 from auth import (hash_password, verify_password, create_token,
                   require_admin, require_super_admin)
-from scheduler import start_scheduler, stop_scheduler, schedule_event_notifications
+from scheduler import (start_scheduler, stop_scheduler,
+                       schedule_event_notifications, send_instant_notifications)
 
 app = FastAPI(title="Church Notification System")
 
@@ -48,10 +50,11 @@ class WorkerIn(BaseModel):
         return None if v == "" else v
 
 class EventIn(BaseModel):
-    title:       str
-    description: Optional[str] = None
-    venue:       str
-    event_time:  str  # ISO 8601 e.g. "2025-06-01T09:00:00+01:00"
+    title:            str
+    description:      Optional[str] = None
+    venue:            str
+    event_time:       str  # ISO 8601 e.g. "2025-06-01T09:00:00+01:00"
+    reminder_offsets: Optional[list[int]] = None  # minutes before event e.g. [1440, 360, 15]
 
 class EventTargetIn(BaseModel):
     department_id:     Optional[str] = None
@@ -82,9 +85,9 @@ class AdminIn(BaseModel):
 
 @app.post("/auth/login")
 def login(form: OAuth2PasswordRequestForm = Depends()):
-    db     = get_db()
-    rows   = db.table("admins").select("*").eq("email", form.username).limit(1).execute().data
-    admin  = rows[0] if rows else None
+    db    = get_db()
+    rows  = db.table("admins").select("*").eq("email", form.username).limit(1).execute().data
+    admin = rows[0] if rows else None
     if not admin or not verify_password(form.password, admin["password_hash"]):
         raise HTTPException(status_code=401, detail="Invalid credentials")
     token = create_token(admin["id"], admin["role"])
@@ -174,6 +177,70 @@ def get_worker(worker_id: str, _=Depends(require_admin)):
         raise HTTPException(404, "Worker not found")
     return w
 
+@app.post("/workers/import")
+async def import_workers(file: UploadFile = File(...), _=Depends(require_admin)):
+    """
+    Accepts an .xlsx with columns:
+    Name | Email | Phone | Department | Sub-Department | Position | Small Group
+    Skips rows with unknown departments or duplicate emails.
+    """
+    if not file.filename.endswith(".xlsx"):
+        raise HTTPException(400, "Only .xlsx files are supported")
+
+    db = get_db()
+
+    depts    = {d["name"].strip().lower(): d["id"]
+                for d in db.table("departments").select("id,name").execute().data}
+    subs     = {(s["name"].strip().lower(), s["department_id"]): s["id"]
+                for s in db.table("sub_departments").select("id,name,department_id").execute().data}
+    existing = {w["email"] for w in db.table("workers").select("email").execute().data if w["email"]}
+
+    contents = await file.read()
+    wb = openpyxl.load_workbook(io.BytesIO(contents), data_only=True)
+    ws = wb.active
+
+    inserted, skipped = [], []
+
+    for i, row in enumerate(ws.iter_rows(min_row=2, values_only=True), start=2):
+        cells = [str(c).strip() if c is not None else "" for c in row]
+        cells += [""] * (7 - len(cells))
+        name, email, phone, dept_raw, sub_raw, position, sg_raw = cells[:7]
+
+        if not name:
+            continue
+
+        dept_id = depts.get(dept_raw.lower())
+        if not dept_id:
+            skipped.append({"row": i, "name": name, "reason": f"Unknown department '{dept_raw}'"})
+            continue
+
+        sub_id = subs.get((sub_raw.lower(), dept_id)) if sub_raw else None
+
+        if email and email in existing:
+            skipped.append({"row": i, "name": name, "reason": f"Email '{email}' already exists"})
+            continue
+
+        small_group = sg_raw.lower() in ("yes", "true", "1", "y")
+
+        inserted.append({
+            "name":              name,
+            "email":             email or None,
+            "phone":             phone or None,
+            "department_id":     dept_id,
+            "sub_department_id": sub_id,
+            "position":          position or None,
+            "small_group":       small_group,
+            "active":            True,
+        })
+        if email:
+            existing.add(email)
+
+    if inserted:
+        db.table("workers").insert(inserted).execute()
+
+    return {"imported": len(inserted), "skipped": len(skipped), "details": skipped}
+
+
 @app.post("/workers")
 def create_worker(body: WorkerIn, _=Depends(require_admin)):
     return get_db().table("workers").insert(body.model_dump()).execute().data
@@ -217,12 +284,10 @@ def create_event(body: EventIn, payload=Depends(require_admin)):
 @app.post("/events/{event_id}/targets")
 def set_event_targets(event_id: str, targets: list[EventTargetIn], _=Depends(require_admin)):
     db = get_db()
-    # Replace all targets for this event
     db.table("event_targets").delete().eq("event_id", event_id).execute()
     rows = [{"event_id": event_id, **t.model_dump()} for t in targets]
     if rows:
         db.table("event_targets").insert(rows).execute()
-    # Rebuild notification schedule
     schedule_event_notifications(event_id)
     return {"message": f"{len(rows)} target(s) set. Notifications scheduled."}
 
@@ -230,8 +295,13 @@ def set_event_targets(event_id: str, targets: list[EventTargetIn], _=Depends(req
 def update_event(event_id: str, body: EventIn, _=Depends(require_admin)):
     db = get_db()
     db.table("events").update(body.model_dump(exclude_unset=True)).eq("id", event_id).execute()
-    schedule_event_notifications(event_id)  # reschedule
+    schedule_event_notifications(event_id)
     return {"message": "Event updated and notifications rescheduled"}
+
+@app.post("/events/{event_id}/send-now")
+def send_now(event_id: str, _=Depends(require_admin)):
+    result = send_instant_notifications(event_id)
+    return {"message": f"Sent {result['sent']} notification(s). Failed: {result['failed']}.", **result}
 
 @app.delete("/events/{event_id}")
 def delete_event(event_id: str, _=Depends(require_super_admin)):

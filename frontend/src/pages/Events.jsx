@@ -59,15 +59,20 @@ function TargetRow({ index, target, departments, subDepts, onChange, onRemove })
 
 function EventModal({ event, departments, subDepts, onClose, onSave }) {
   const [form, setForm] = useState({
-    title: event?.title || '',
+    title:       event?.title || '',
     description: event?.description || '',
-    venue: event?.venue || '',
-    event_time: event?.event_time
+    venue:       event?.venue || '',
+    event_time:  event?.event_time
       ? dayjs(event.event_time).format('YYYY-MM-DDTHH:mm')
       : '',
   })
+  const [reminderOffsets, setReminderOffsets] = useState(
+    event?.reminder_offsets
+      ? event.reminder_offsets.join(', ')
+      : '1440, 360, 15'
+  )
   const [targets, setTargets] = useState(event?.targets || [])
-  const [saving, setSaving] = useState(false)
+  const [saving, setSaving]   = useState(false)
 
   function addTarget() {
     setTargets(t => [...t, { department_id: null, sub_department_id: null, position: null, small_group_only: false }])
@@ -87,9 +92,17 @@ function EventModal({ event, departments, subDepts, onClose, onSave }) {
       alert('Add at least one notification target.')
       return
     }
+    const offsets = reminderOffsets
+      .split(',')
+      .map(s => parseInt(s.trim()))
+      .filter(n => !isNaN(n) && n > 0)
+    if (offsets.length === 0) {
+      alert('Enter at least one valid reminder time (in minutes).')
+      return
+    }
     setSaving(true)
     try {
-      await onSave(form, targets)
+      await onSave({ ...form, reminder_offsets: offsets }, targets)
       onClose()
     } catch (err) {
       alert(err.message)
@@ -123,9 +136,19 @@ function EventModal({ event, departments, subDepts, onClose, onSave }) {
                 onChange={e => setForm(f => ({...f, description: e.target.value}))}
                 style={{ resize: 'vertical' }} />
             </div>
+            <div className="field span2">
+              <label>Reminder Times (minutes before event)</label>
+              <input
+                value={reminderOffsets}
+                onChange={e => setReminderOffsets(e.target.value)}
+                placeholder="e.g. 1440, 360, 15"
+              />
+              <span style={{ fontSize: 11.5, color: 'var(--ink3)', marginTop: 3 }}>
+                Comma-separated. 1440 = 24hrs, 360 = 6hrs, 60 = 1hr, 15 = 15min.
+              </span>
+            </div>
           </div>
 
-          {/* Targets */}
           <div style={{ borderTop: '1px solid var(--border)', paddingTop: 18, marginBottom: 4 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
               <div>
@@ -198,13 +221,23 @@ export default function Events() {
     load()
   }
 
+  async function sendNow(id, title) {
+    if (!confirm(`Send instant notifications for "${title}" now?`)) return
+    try {
+      const res = await api.sendNow(id)
+      alert(res.message)
+    } catch (err) {
+      alert(err.message)
+    }
+  }
+
   async function remove(id) {
     if (!confirm('Delete this event and all its notifications?')) return
     await api.deleteEvent(id)
     load()
   }
 
-  const now = dayjs()
+  const now      = dayjs()
   const upcoming = events.filter(e => dayjs(e.event_time).isAfter(now))
   const past     = events.filter(e => !dayjs(e.event_time).isAfter(now))
 
@@ -224,6 +257,7 @@ export default function Events() {
               <td>
                 <div style={{ display: 'flex', gap: 6 }}>
                   <button className="btn btn-ghost btn-sm" onClick={() => openEdit(e)}>Edit</button>
+                  <button className="btn btn-primary btn-sm" onClick={() => sendNow(e.id, e.title)}>Send Now</button>
                   <button className="btn btn-danger btn-sm" onClick={() => remove(e.id)}>Delete</button>
                 </div>
               </td>

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { api } from '../api'
 
 const POSITIONS_MAP = {
@@ -103,8 +103,38 @@ export default function Workers() {
   const [departments, setDepts]     = useState([])
   const [subDepts, setSubDepts]     = useState([])
   const [filterDept, setFilterDept] = useState('')
-  const [modal, setModal]           = useState(null) // null | 'add' | worker object
+  const [modal, setModal]           = useState(null)
   const [loading, setLoading]       = useState(true)
+  const [importing, setImporting]   = useState(false)
+  const fileRef                     = useRef()
+
+  async function handleImport(e) {
+    const file = e.target.files[0]
+    if (!file) return
+    setImporting(true)
+    try {
+      const form = new FormData()
+      form.append('file', file)
+      const tok = localStorage.getItem('token')
+      const res = await fetch(
+        `${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/workers/import`,
+        { method: 'POST', headers: { Authorization: `Bearer ${tok}` }, body: form }
+      )
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.detail || 'Import failed')
+      let msg = `✓ ${data.imported} worker(s) imported.`
+      if (data.skipped > 0)
+        msg += `\n⚠ ${data.skipped} row(s) skipped:\n` +
+          data.details.map(d => `  Row ${d.row} (${d.name}): ${d.reason}`).join('\n')
+      alert(msg)
+      load()
+    } catch (err) {
+      alert(err.message)
+    } finally {
+      setImporting(false)
+      fileRef.current.value = ''
+    }
+  }
 
   async function load() {
     setLoading(true)
@@ -134,7 +164,7 @@ export default function Workers() {
     load()
   }
 
-  function deptName(id) {
+  function deptLabel(id) {
     return departments.find(d => d.id === id)?.name || '—'
   }
 
@@ -142,10 +172,16 @@ export default function Workers() {
     <div>
       <div className="page-header">
         <h1>Workers</h1>
-        <button className="btn btn-primary" onClick={() => setModal('add')}>+ Add Worker</button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <input ref={fileRef} type="file" accept=".xlsx"
+            style={{ display: 'none' }} onChange={handleImport} />
+          <button className="btn btn-ghost" onClick={() => fileRef.current.click()} disabled={importing}>
+            {importing ? 'Importing…' : '⬆ Import Excel'}
+          </button>
+          <button className="btn btn-primary" onClick={() => setModal('add')}>+ Add Worker</button>
+        </div>
       </div>
 
-      {/* Filter */}
       <div style={{ marginBottom: 16 }}>
         <select value={filterDept} onChange={e => setFilterDept(e.target.value)}
           style={{ padding: '8px 12px', border: '1px solid var(--border)', borderRadius: 8,
@@ -172,7 +208,7 @@ export default function Workers() {
               {workers.map(w => (
                 <tr key={w.id}>
                   <td style={{ fontWeight: 500 }}>{w.name}</td>
-                  <td>{deptName(w.department_id)}</td>
+                  <td>{deptLabel(w.department_id)}</td>
                   <td>{w.position || '—'}</td>
                   <td style={{ color: 'var(--ink2)' }}>{w.phone || '—'}</td>
                   <td style={{ color: 'var(--ink2)' }}>{w.email || '—'}</td>

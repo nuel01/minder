@@ -55,6 +55,7 @@ export const api = {
   updateEvent:    (id, body)    => req('PATCH',  `/events/${id}`, body),
   deleteEvent:    (id)          => req('DELETE', `/events/${id}`),
   setTargets:     (id, targets) => req('POST',   `/events/${id}/targets`, targets),
+  sendNow:        (id)          => req('POST',   `/events/${id}/send-now`),
 
   // Notifications
   getNotifications: (filters = {}) => {
