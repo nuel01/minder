@@ -54,7 +54,7 @@ function Modal({ worker, departments, subDepts, onClose, onSave }) {
             </div>
             <div className="field">
               <label>Phone</label>
-              <input value={form.phone || ''} onChange={e => set('phone', e.target.value)} placeholder="+234..." />
+              <input value={form.phone || ''} onChange={e => set('phone', e.target.value)} placeholder="+..." />
             </div>
             <div className="field">
               <label>Department</label>
@@ -72,7 +72,7 @@ function Modal({ worker, departments, subDepts, onClose, onSave }) {
               </select>
             </div>
             <div className="field">
-              <label>Position</label>
+              <label>Designation</label>
               <select value={form.position || ''} onChange={e => set('position', e.target.value)} required>
                 <option value="">Select…</option>
                 {positions.map(p => <option key={p} value={p}>{p}</option>)}
@@ -82,7 +82,7 @@ function Modal({ worker, departments, subDepts, onClose, onSave }) {
               <input type="checkbox" id="sg" checked={form.small_group}
                 onChange={e => set('small_group', e.target.checked)} style={{ width: 16, height: 16 }} />
               <label htmlFor="sg" style={{ textTransform: 'none', fontSize: 13, letterSpacing: 0 }}>
-                In a small group
+                Small Group Leader? 
               </label>
             </div>
           </div>
@@ -164,7 +164,7 @@ export default function Workers() {
           <table>
             <thead>
               <tr>
-                <th>Name</th><th>Department</th><th>Position</th>
+                <th>Name</th><th>Department</th><th>Designation</th>
                 <th>Phone</th><th>Email</th><th>Status</th><th></th>
               </tr>
             </thead>
