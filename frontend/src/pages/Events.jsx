@@ -65,6 +65,7 @@ function EventModal({ event, departments, subDepts, onClose, onSave }) {
     event_time:  event?.event_time
       ? dayjs(event.event_time).format('YYYY-MM-DDTHH:mm')
       : '',
+    email_body:  event?.email_body || '',
   })
   const [reminderOffsets, setReminderOffsets] = useState(
     event?.reminder_offsets
@@ -102,7 +103,7 @@ function EventModal({ event, departments, subDepts, onClose, onSave }) {
     }
     setSaving(true)
     try {
-      await onSave({ ...form, reminder_offsets: offsets }, targets)
+      await onSave({ ...form, reminder_offsets: offsets, email_body: form.email_body || null }, targets)
       onClose()
     } catch (err) {
       alert(err.message)
@@ -134,6 +135,13 @@ function EventModal({ event, departments, subDepts, onClose, onSave }) {
               <label>Description</label>
               <textarea rows={2} value={form.description || ''}
                 onChange={e => setForm(f => ({...f, description: e.target.value}))}
+                style={{ resize: 'vertical' }} />
+            </div>
+            <div className="field span2">
+              <label>Email Body <span style={{ fontWeight: 400, color: 'var(--ink3)' }}>(optional — use {'{name}'} for worker's name)</span></label>
+              <textarea rows={4} value={form.email_body || ''}
+                onChange={e => setForm(f => ({...f, email_body: e.target.value}))}
+                placeholder={"Hi {name},\n\nYou are invited to attend…"}
                 style={{ resize: 'vertical' }} />
             </div>
             <div className="field span2">

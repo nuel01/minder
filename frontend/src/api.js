@@ -62,4 +62,6 @@ export const api = {
     const q = new URLSearchParams(filters).toString()
     return req('GET', `/notifications${q ? `?${q}` : ''}`)
   },
+  deleteNotification: (id)          => req('DELETE', `/notifications/${id}`),
+  clearNotifications: (status = '') => req('DELETE', `/notifications${status ? `?status=${status}` : ''}`),
 }

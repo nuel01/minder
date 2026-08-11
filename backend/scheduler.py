@@ -3,10 +3,10 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from config import get_db
 from notifications import dispatch
 
-scheduler = BackgroundScheduler(timezone="UTC")
+scheduler = BackgroundScheduler(timezone="America/Chicago")
 
 DEFAULT_OFFSETS_MINUTES = [1440, 360, 15]  # 24hr, 6hr, 15min
-CHANNELS = ["email", "sms", "whatsapp", "in_app"]
+CHANNELS = ["email"]
 
 
 def _offset_label(minutes: int) -> str:
@@ -85,13 +85,16 @@ def schedule_event_notifications(event_id: str):
     if not matched_ids:
         return
 
+    custom_body = event.get("email_body") or None
+
     rows = []
     for worker_id in matched_ids:
         for minutes in offset_minutes:
             scheduled_time = event_time - timedelta(minutes=minutes)
             if scheduled_time <= datetime.now(timezone.utc):
                 continue
-            _, body = _build_message(event["title"], event_time, event["venue"], minutes)
+            _, auto_body = _build_message(event["title"], event_time, event["venue"], minutes)
+            body = custom_body if custom_body else auto_body
             for channel in CHANNELS:
                 rows.append({
                     "event_id":       event_id,
@@ -120,7 +123,8 @@ def send_instant_notifications(event_id: str) -> dict:
 
     workers    = db.table("workers").select("id,name,email,phone")\
                    .in_("id", list(matched_ids)).execute().data
-    _, body_tpl = _build_instant_message(event["title"], event_time, event["venue"])
+    _, auto_body = _build_instant_message(event["title"], event_time, event["venue"])
+    body_tpl = event.get("email_body") or auto_body
 
     sent = failed = 0
     now  = datetime.now(timezone.utc).isoformat()

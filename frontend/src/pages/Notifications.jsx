@@ -42,7 +42,15 @@ export default function Notifications() {
     <div>
       <div className="page-header">
         <h1>Notification History</h1>
-        <button className="btn btn-ghost" onClick={load}>↻ Refresh</button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button className="btn btn-ghost" onClick={load}>↻ Refresh</button>
+          <button className="btn btn-danger" onClick={async () => {
+            const label = status ? `all "${status}" notifications` : 'entire notification history'
+            if (!confirm(`Clear ${label}? This cannot be undone.`)) return
+            await api.clearNotifications(status)
+            load()
+          }}>✕ Clear {status || 'All'}</button>
+        </div>
       </div>
 
       {/* Summary pills */}
@@ -80,7 +88,7 @@ export default function Notifications() {
             <thead>
               <tr>
                 <th>Worker</th><th>Event</th><th>Channel</th>
-                <th>Scheduled</th><th>Sent</th><th>Status</th>
+                <th>Scheduled</th><th>Sent</th><th>Status</th><th></th>
               </tr>
             </thead>
             <tbody>
@@ -103,6 +111,12 @@ export default function Notifications() {
                     <span className={`badge ${STATUS_BADGE[n.status] || 'badge-gray'}`}>
                       {n.status}
                     </span>
+                  </td>
+                  <td>
+                    <button className="btn btn-danger btn-sm" onClick={async () => {
+                      await api.deleteNotification(n.id)
+                      setNotifs(prev => prev.filter(x => x.id !== n.id))
+                    }}>✕</button>
                   </td>
                 </tr>
               ))}

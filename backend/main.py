@@ -55,6 +55,7 @@ class EventIn(BaseModel):
     venue:            str
     event_time:       str  # ISO 8601 e.g. "2025-06-01T09:00:00+01:00"
     reminder_offsets: Optional[list[int]] = None  # minutes before event e.g. [1440, 360, 15]
+    email_body:       Optional[str] = None  # custom email body; use {name} for worker name
 
 class EventTargetIn(BaseModel):
     department_id:     Optional[str] = None
@@ -321,3 +322,16 @@ def list_notifications(event_id: Optional[str] = None, status: Optional[str] = N
     if status:
         q = q.eq("status", status)
     return q.order("scheduled_time", desc=True).limit(200).execute().data
+
+@app.delete("/notifications/{notif_id}")
+def delete_notification(notif_id: str, _=Depends(require_admin)):
+    get_db().table("notifications").delete().eq("id", notif_id).execute()
+    return {"message": "Deleted"}
+
+@app.delete("/notifications")
+def clear_notifications(status: Optional[str] = None, _=Depends(require_admin)):
+    q = get_db().table("notifications").delete()
+    if status:
+        q = q.eq("status", status)
+    q.neq("id", "00000000-0000-0000-0000-000000000000").execute()  # delete all rows
+    return {"message": "Cleared"}
