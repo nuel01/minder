@@ -103,7 +103,13 @@ function EventModal({ event, departments, subDepts, onClose, onSave }) {
     }
     setSaving(true)
     try {
-      await onSave({ ...form, reminder_offsets: offsets, email_body: form.email_body || null }, targets)
+      const payload = {
+        ...form,
+        event_time: dayjs(form.event_time).toISOString(),
+        reminder_offsets: offsets,
+        email_body: form.email_body || null,
+      }
+      await onSave(payload, targets)
       onClose()
     } catch (err) {
       alert(err.message)
