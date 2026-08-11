@@ -1,4 +1,7 @@
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
+
+CST = ZoneInfo("America/Chicago")
 from apscheduler.schedulers.background import BackgroundScheduler
 from config import get_db
 from notifications import dispatch
@@ -91,7 +94,7 @@ def schedule_event_notifications(event_id: str):
     for worker_id in matched_ids:
         for minutes in offset_minutes:
             scheduled_time = event_time - timedelta(minutes=minutes)
-            if scheduled_time <= datetime.now(timezone.utc):
+            if scheduled_time <= datetime.now(CST):
                 continue
             _, auto_body = _build_message(event["title"], event_time, event["venue"], minutes)
             body = custom_body if custom_body else auto_body
@@ -127,7 +130,7 @@ def send_instant_notifications(event_id: str) -> dict:
     body_tpl = event.get("email_body") or auto_body
 
     sent = failed = 0
-    now  = datetime.now(timezone.utc).isoformat()
+    now  = datetime.now(CST).isoformat()
     rows = []
 
     for w in workers:
@@ -171,7 +174,7 @@ def fire_due_notifications():
         )
         status = "sent" if success else "failed"
         db.table("notifications")\
-          .update({"status": status, "sent_at": datetime.now(timezone.utc).isoformat()})\
+          .update({"status": status, "sent_at": datetime.now(CST).isoformat()})\
           .eq("id", row["notification_id"]).execute()
 
 
